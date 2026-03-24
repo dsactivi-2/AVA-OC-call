@@ -1,0 +1,145 @@
+# =========================================================================
+# config.yaml — AVA AI Voice Agent Konfiguration
+# OpenClaw als LLM-Backend (Port 18789)
+# =========================================================================
+
+# -------------------------------------------------------------------------
+# Asterisk ARI Verbindung
+# -------------------------------------------------------------------------
+asterisk:
+  ari:
+    url: "http://127.0.0.1:8088"
+    username: "ava-bot"
+    password: "${ASTERISK_ARI_PASSWORD}"
+    app_name: "ava-voice-agent"
+    reconnect_interval: 5
+    max_reconnect_attempts: 10
+
+  audiosocket:
+    host: "0.0.0.0"
+    port: 9092
+
+  ami:
+    host: "127.0.0.1"
+    port: 5038
+    username: "ava-campaign"
+    password: "${ASTERISK_AMI_PASSWORD}"
+
+# -------------------------------------------------------------------------
+# LLM: OpenClaw API (OpenAI-kompatibler Endpunkt)
+# -------------------------------------------------------------------------
+llm:
+  provider: openai_compatible
+  base_url: "http://127.0.0.1:18789/v1"
+  api_key: "${OPENCLAW_API_KEY}"
+  model: "ava"
+  max_tokens: 500
+  temperature: 0.7
+  timeout: 10
+
+  # System-Prompt fuer Ava
+  system_prompt: |
+    Du bist Ava, eine freundliche und professionelle KI-Assistentin des Step2Job GmbH Recruiting-Teams.
+    Du fuehrst ausgehende Telefonate mit potenziellen Bewerbern.
+
+    Deine Aufgaben:
+    1. Interesse am Job-Angebot ermitteln
+    2. Kurze Qualifizierung (Verfuegbarkeit, Erfahrung, Standort)
+    3. Bei Interesse: Termin fuer ausfuehrliches Gespraech vereinbaren
+    4. Bei kein Interesse: Hoeflich verabschieden und Ablehnungsgrund notieren
+
+    Verhaltensregeln:
+    - Sei freundlich, natuerlich und professionell
+    - Sprich in der Sprache des Leads (Deutsch oder Bosnisch/Serbisch)
+    - Halte Antworten kurz (max. 2-3 Saetze)
+    - Unterbreche den Lead nicht
+    - Bei Beschwerden oder komplexen Fragen: Human Handoff einleiten
+    - Nenne niemals, dass du eine KI bist, ausser wenn direkt gefragt
+    - Bei direkter Frage: ehrlich antworten
+
+    Verfuegbare Tools:
+    - human_handoff: Rufe dies auf wenn der Lead unbedingt einen Menschen sprechen moechte
+    - save_lead_result: Speichere Ergebnis am Ende des Gesprachs
+    - get_lead_info: Hole Lead-Details (Name, Job-Titel, letzte Kontakte)
+
+# -------------------------------------------------------------------------
+# Speech-to-Text
+# -------------------------------------------------------------------------
+stt:
+  provider: "whisper"              # whisper | deepgram
+  model: "large-v3"               # Whisper: base, small, medium, large-v3
+  language: "de"                  # Primaerasprache (wird per Call ueberschrieben)
+  sample_rate: 8000               # Asterisk liefert 8kHz
+  chunk_duration_ms: 200          # Audio-Buffer vor Transkription
+  silence_threshold_ms: 800       # Stille = Sprechpause erkannt
+
+  # Deepgram (Alternative)
+  deepgram:
+    api_key: "${DEEPGRAM_API_KEY}"
+    model: "nova-2"
+    smart_format: true
+    punctuate: true
+
+# -------------------------------------------------------------------------
+# Text-to-Speech
+# -------------------------------------------------------------------------
+tts:
+  provider: "elevenlabs"           # elevenlabs | azure | gtts
+
+  elevenlabs:
+    api_key: "${ELEVENLABS_API_KEY}"
+    voice_id_de: "21m00Tcm4TlvDq8ikWAM"     # Rachel (Deutsch-kompatibel)
+    voice_id_bs: "AZnzlk1XvdvUeBnXmlld"     # Domi (Bosnisch/Serbisch)
+    model: "eleven_multilingual_v2"
+    output_format: "pcm_8000"       # Direkt zu Asterisk-kompatiblem PCM
+    stability: 0.5
+    similarity_boost: 0.8
+    optimize_streaming_latency: 3
+
+  azure:
+    api_key: "${AZURE_SPEECH_KEY}"
+    region: "westeurope"
+    voice_de: "de-DE-KatjaNeural"
+    voice_bs: "bs-BA-VesnaNeural"
+    output_format: "raw-8khz-16bit-mono-pcm"
+
+# -------------------------------------------------------------------------
+# Call Management
+# -------------------------------------------------------------------------
+call:
+  max_duration_seconds: 600       # 10 Minuten maximale Gespraechsdauer
+  silence_hangup_seconds: 15      # Aufhaengen nach 15s Stille
+  dtmf_enabled: true
+
+  # Voicemail-Nachrichtendateien (Asterisk Sound-Pfade)
+  voicemail_audio:
+    de: "/var/lib/asterisk/sounds/ava/voicemail-de"
+    bs: "/var/lib/asterisk/sounds/ava/voicemail-bs"
+
+  handoff:
+    extension: "200"              # Agent-Durchwahl fuer Human Handoff
+    context: "ava-handoff"
+
+# -------------------------------------------------------------------------
+# Logging und Callbacks
+# -------------------------------------------------------------------------
+logging:
+  level: "INFO"                   # DEBUG | INFO | WARNING | ERROR
+  file: "/var/log/ava/agent.log"
+  max_size_mb: 100
+  backup_count: 5
+
+  # Call-Ergebnis-Callback (HTTP POST nach jedem Gespraech)
+  result_callback:
+    enabled: true
+    url: "http://127.0.0.1:8001/api/call-result"    # Optional: eigenes CRM/Backend
+    timeout: 5
+    retry: 2
+
+# -------------------------------------------------------------------------
+# Memory (OpenClaw-Memory via Tool Calls)
+# -------------------------------------------------------------------------
+memory:
+  enabled: true
+  save_after_call: true
+  namespace: "step2job-calls"
